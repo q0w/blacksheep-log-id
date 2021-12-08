@@ -3,6 +3,7 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from dataclasses import field
+from functools import singledispatch
 from logging import Filter
 from logging import getLogger
 from logging import LogRecord
@@ -12,6 +13,7 @@ from uuid import uuid4
 
 from blacksheep.messages import Request
 from blacksheep.messages import Response
+from blacksheep.server import Application
 
 request_id: ContextVar[Optional[str]] = ContextVar('request_id', default=None)
 logger = getLogger('blacksheep_request_id')
@@ -37,28 +39,39 @@ class RequestIdMiddleware:
     validator: Callable[[str], bool] = field(default=is_valid_uuid)
     transformer: Callable[[str], str] = field(default=lambda a: a)
 
-    async def __call__(
-        self,
-        request: Request,
-        handler: Callable[[Request], Awaitable[Response]],
-    ) -> Response:
-        header_value = request.get_first_header(self.header_name)
-        if header_value:
-            header_value = header_value.decode('utf-8')
-        if not header_value:
-            id_value: str = self.transformer(self.generator())
-        elif self.validator and not self.validator(header_value):
-            logger.warning(
-                "Generating new ID, since header value '%s' is invalid",
-                header_value,
-            )
-            id_value = self.transformer(self.generator())
-        else:
-            id_value = self.transformer(header_value)
 
-        request_id.set(id_value.encode('utf-8'))  # type: ignore[arg-type]
+@singledispatch
+def request_id_middleware(app, **kwargs):
+    raise NotImplementedError
 
-        request.headers[self.header_name] = request_id.get()
-        response = await handler(request)
 
-        return response
+@request_id_middleware.register(Application)
+def _blacksheep(app: Application, **kwargs) -> RequestIdMiddleware:
+    class Middleware(RequestIdMiddleware):
+        async def __call__(
+            self,
+            request: Request,
+            handler: Callable[[Request], Awaitable[Response]],
+        ) -> Response:
+            header_value = request.get_first_header(self.header_name)
+            if header_value:
+                header_value = header_value.decode('utf-8')
+            if not header_value:
+                id_value: str = self.transformer(self.generator())
+            elif self.validator and not self.validator(header_value):
+                logger.warning(
+                    "Generating new ID, since header value '%s' is invalid",
+                    header_value,
+                )
+                id_value = self.transformer(self.generator())
+            else:
+                id_value = self.transformer(header_value)
+
+            request_id.set(id_value.encode('utf-8'))  # type: ignore[arg-type]
+
+            request.headers[self.header_name] = request_id.get()
+            response = await handler(request)
+
+            return response
+
+    return Middleware(**kwargs)
