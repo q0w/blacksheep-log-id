@@ -48,7 +48,7 @@ class RequestIdMiddleware:
     ) -> Response:
         header_value = request.get_first_header(self.header_name)
         if isinstance(header_value, bytes):
-            header_value = header_value.decode('utf-8')
+            header_value = header_value.decode()
         if not header_value:
             id_value: str = self.transformer(self.generator())
         elif self.validator and not self.validator(header_value):
@@ -60,7 +60,7 @@ class RequestIdMiddleware:
         else:
             id_value = self.transformer(header_value)
 
-        request_id.set(id_value.encode('utf-8'))  # type: ignore[arg-type]
+        request_id.set(id_value.encode())  # type: ignore[arg-type]
 
         request.headers[self.header_name] = request_id.get()
         response = await handler(request)
