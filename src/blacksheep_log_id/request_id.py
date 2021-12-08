@@ -47,7 +47,7 @@ class RequestIdMiddleware:
         handler: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         header_value = request.get_first_header(self.header_name)
-        if header_value:
+        if isinstance(header_value, bytes):
             header_value = header_value.decode('utf-8')
         if not header_value:
             id_value: str = self.transformer(self.generator())
