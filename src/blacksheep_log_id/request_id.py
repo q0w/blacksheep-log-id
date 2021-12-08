@@ -1,8 +1,6 @@
 from collections.abc import Awaitable
 from collections.abc import Callable
 from contextvars import ContextVar
-from dataclasses import dataclass
-from dataclasses import field
 from logging import Filter
 from logging import getLogger
 from logging import LogRecord
@@ -30,12 +28,18 @@ def is_valid_uuid(uuid_: str) -> bool:
         return False
 
 
-@dataclass
 class RequestIdMiddleware:
-    header_name: bytes = b'X-Request-ID'
-    generator: Callable[[], str] = field(default=lambda: uuid4().hex)
-    validator: Callable[[str], bool] = field(default=is_valid_uuid)
-    transformer: Callable[[str], str] = field(default=lambda a: a)
+    def __init__(
+        self,
+        header_name: bytes = b'X-Request-ID',
+        generator: Callable[[], str] = lambda: uuid4().hex,
+        validator: Callable[[str], bool] = is_valid_uuid,
+        transformer: Callable[[str], str] = lambda a: a,
+    ):
+        self.header_name = header_name
+        self.generator = generator
+        self.validator = validator
+        self.transformer = transformer
 
     async def __call__(
         self,
